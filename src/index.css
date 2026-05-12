@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+body { background: #0f0f1a; color: #f1f5f9; font-family: 'DM Sans', system-ui, sans-serif; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.no-bounce { overscroll-behavior: none; }
+
+.btn-primary { @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl px-4 py-3 transition-all active:scale-95 disabled:opacity-50; }
+.btn-secondary { @apply bg-surface-600 hover:bg-surface-500 text-white font-medium rounded-xl px-4 py-2.5 transition-all active:scale-95; }
+.btn-danger { @apply bg-red-500/20 hover:bg-red-500/30 text-red-400 font-medium rounded-xl px-4 py-2.5 transition-all border border-red-500/20; }
+.input-field { @apply bg-surface-700 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500/50 w-full transition-all; }
+.card { @apply bg-surface-700 rounded-2xl border border-white/5; }
+.modal-overlay { @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center; }
+.modal-content { @apply bg-surface-800 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg border border-white/10 max-h-[90vh] overflow-y-auto; }
+.item-tile { @apply bg-surface-700 hover:bg-surface-600 rounded-xl p-3 cursor-pointer transition-all active:scale-95 border border-transparent hover:border-brand-500/30 select-none flex flex-col; }
+.item-tile.in-cart { @apply border-brand-500/60 bg-indigo-900/30; }
+.cat-pill { @apply px-4 py-2 rounded-full text-sm font-medium transition-all cursor-pointer whitespace-nowrap border; }
+.cat-pill.active { @apply bg-brand-500 text-white border-brand-500; }
+.cat-pill:not(.active) { @apply bg-surface-700 text-slate-400 hover:text-white border-white/5; }
+.numpad-btn { @apply bg-surface-700 hover:bg-surface-600 active:bg-surface-500 text-white text-2xl font-semibold rounded-xl flex items-center justify-center transition-all active:scale-95 select-none cursor-pointer h-16; }
+.charge-btn { @apply w-full bg-gradient-to-r from-brand-500 to-indigo-500 hover:from-brand-600 hover:to-indigo-600 text-white text-xl font-bold rounded-2xl py-5 transition-all shadow-lg; }
+.badge { @apply text-xs font-semibold px-2 py-0.5 rounded-full; }
+.role-admin { @apply badge bg-purple-500/20 text-purple-300; }
+.role-manager { @apply badge bg-blue-500/20 text-blue-300; }
+.role-cashier { @apply badge bg-slate-500/20 text-slate-300; }
+.low-stock { @apply text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
+.out-stock { @apply text-red-400 bg-red-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
+.in-stock-badge { @apply text-green-400 bg-green-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
+.data-table { @apply w-full text-sm; }
+.data-table th { @apply text-left text-slate-400 font-medium py-2 px-3 border-b border-white/5; }
+.data-table td { @apply py-3 px-3 border-b border-white/5; }
+.stat-card { @apply card p-4 flex flex-col gap-1; }
