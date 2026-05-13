@@ -186,14 +186,32 @@ export default function SalesPage() {
 
   const handleItemTap = useCallback((item) => {
     const inCart = cart.items.find(i => i.id === item.id)
-    if (inCart) { setQtyModal(item); setQtyInput(String(inCart.quantity)) }
-    else cart.addItem(item)
+    setQtyModal(item)
+    // If it's already in the cart, show the current quantity. Otherwise, start blank.
+    setQtyInput(inCart ? String(inCart.quantity) : '')
   }, [cart])
 
   const applyQty = () => {
-    if (!qtyInput || Number(qtyInput) <= 0) cart.removeItem(qtyModal.id)
-    else cart.setQuantity(qtyModal.id, Number(qtyInput))
-    setQtyModal(null); setQtyInput('')
+    const num = Number(qtyInput)
+    const inCart = cart.items.find(i => i.id === qtyModal.id)
+
+    if (!qtyInput || num <= 0) {
+      // If user enters 0 or leaves it blank, remove it if it was in the cart
+      if (inCart) cart.removeItem(qtyModal.id)
+    } else {
+      if (inCart) {
+        // Update existing item
+        cart.setQuantity(qtyModal.id, num)
+      } else {
+        // Add new item and immediately apply the chosen quantity
+        cart.addItem(qtyModal)
+        cart.setQuantity(qtyModal.id, num)
+      }
+    }
+    
+    // Reset and close
+    setQtyModal(null)
+    setQtyInput('')
   }
 
   const numpadPress = (val) => {
@@ -323,13 +341,20 @@ export default function SalesPage() {
 
       {/* Qty Modal */}
       {qtyModal && (
-        <div className="modal-overlay" onClick={() => setQtyModal(null)}>
+        <div className="modal-overlay" onClick={() => { setQtyModal(null); setQtyInput(''); }}>
           <div className="modal-content p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-white font-bold text-lg mb-1">{qtyModal.name}</h3>
+            <div className="flex justify-between items-start mb-1">
+              <h3 className="text-white font-bold text-lg">{qtyModal.name}</h3>
+              <button onClick={() => { setQtyModal(null); setQtyInput(''); }} className="text-slate-400 hover:text-white p-1">
+                <X size={20} />
+              </button>
+            </div>
             <p className="text-slate-400 text-sm mb-4">{formatCurrency(qtyModal.price, sym)} each</p>
+            
             <div className="text-center text-4xl font-bold text-white mb-6 h-16 flex items-center justify-center bg-surface-700 rounded-xl font-mono">
               {qtyInput || '0'}
             </div>
+            
             <div className="grid grid-cols-3 gap-3 mb-4">
               {[1,2,3,4,5,6,7,8,9].map(n => (
                 <button key={n} onClick={() => numpadPress(String(n))} className="numpad-btn">{n}</button>
@@ -338,9 +363,14 @@ export default function SalesPage() {
               <button onClick={() => numpadPress('0')} className="numpad-btn">0</button>
               <button onClick={() => numpadPress('back')} className="numpad-btn"><Delete size={20} /></button>
             </div>
+            
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => { cart.removeItem(qtyModal.id); setQtyModal(null) }} className="btn-danger py-3">Remove</button>
-              <button onClick={applyQty} className="btn-primary">Set Qty</button>
+              <button onClick={() => { setQtyModal(null); setQtyInput(''); }} className="btn-secondary py-3">
+                Cancel
+              </button>
+              <button onClick={applyQty} className="btn-primary py-3">
+                {cart.items.find(i => i.id === qtyModal.id) ? 'Update Qty' : 'Add to Cart'}
+              </button>
             </div>
           </div>
         </div>
