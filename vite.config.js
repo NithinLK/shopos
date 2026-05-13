@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
-        name: 'ShopOS — Point of Sale',
-        short_name: 'ShopOS',
-        description: 'Complete POS and Store Management System',
+        name: 'Mundakathil Stores POS',
+	short_name: 'M.Stores',
+	description: 'Mundakathil Stores Point of Sale',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
         display: 'standalone',

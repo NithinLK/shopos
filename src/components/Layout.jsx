@@ -34,8 +34,7 @@ export default function Layout({ children }) {
           <Menu size={22} className="text-white" />
         </button>
         <div className="flex items-center gap-2 flex-1">
-          <Store size={18} className="text-brand-400" />
-          <span className="font-bold text-white truncate">{settings.store_name}</span>
+          <img src="/logo.png" alt="Mundakathil Stores" className="h-7 object-contain" />
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: bg }}>
