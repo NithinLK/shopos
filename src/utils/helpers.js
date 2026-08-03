@@ -38,6 +38,17 @@ export const PERMISSIONS = {
 }
 export const canAccess = (role, permission) => (PERMISSIONS[role] || []).includes(permission)
 
+export const sanitizeInput = (value) => {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+export const sanitizeNumber = (value, min = 0, max = Infinity) => {
+  const n = Number(value)
+  if (Number.isNaN(n)) return min
+  return Math.min(Math.max(n, min), max)
+}
+
 export const getDateRange = (preset) => {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
