@@ -152,7 +152,7 @@ export default function ItemsPage() {
   const today = new Date().toISOString().slice(0, 10)
   const soonDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
 
-  // ── Stock summary counts ───────────────────────────────────
+  // ── Stock summary counts update ───────────────────────────────────
   const outCount = items.filter(i => i.track_stock && i.stock_quantity <= 0).length
   const lowCount = items.filter(i =>
     i.track_stock && i.stock_quantity > 0 &&
