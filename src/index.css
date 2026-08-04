@@ -30,6 +30,7 @@ body { background: #0f0f1a; color: #f1f5f9; font-family: 'DM Sans', system-ui, s
 .low-stock { @apply text-amber-400 bg-amber-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
 .out-stock { @apply text-red-400 bg-red-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
 .in-stock-badge { @apply text-green-400 bg-green-400/10 rounded px-1.5 py-0.5 text-xs font-medium; }
+.negative-stock { @apply text-red-300 bg-red-500/20 rounded px-1.5 py-0.5 text-xs font-bold; }
 .data-table { @apply w-full text-sm; }
 .data-table th { @apply text-left text-slate-400 font-medium py-2 px-3 border-b border-white/5; }
 .data-table td { @apply py-3 px-3 border-b border-white/5; }

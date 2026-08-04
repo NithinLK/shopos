@@ -132,7 +132,10 @@ export default function ItemsPage() {
       barcode: sanitizeInput(form.barcode) || null,
       sku: sanitizeInput(form.sku) || null,
       track_stock: form.track_stock,
-      stock_quantity: form.track_stock ? sanitizeNumber(form.stock_quantity, 0, 999999) : 0,
+      // Negative allowed on purpose: lets stock reflect an oversold item (sales exceeded
+      // recorded inventory). Reports still count units sold from transaction line items,
+      // not from this value, so oversold stock never affects sales/profit reporting.
+      stock_quantity: form.track_stock ? sanitizeNumber(form.stock_quantity, -999999, 999999) : 0,
       low_stock_alert: sanitizeNumber(form.low_stock_alert, 1, 9999),
       expiry_date: form.expiry_date || null,
       is_active: form.is_active,
@@ -282,7 +285,9 @@ export default function ItemsPage() {
               {/* Stock */}
               <div className="col-span-3 text-right">
                 {item.track_stock ? (
-                  stockStatus === 'out'
+                  stockStatus === 'negative'
+                    ? <span className="negative-stock" title="Sold more than was in stock">Oversold: {item.stock_quantity}</span>
+                    : stockStatus === 'out'
                     ? <span className="out-stock">Out</span>
                     : stockStatus === 'low'
                     ? <span className="low-stock">Low: {item.stock_quantity}</span>
@@ -437,6 +442,9 @@ export default function ItemsPage() {
                       placeholder="0"
                       value={form.stock_quantity}
                       onChange={e => f('stock_quantity', e.target.value)} />
+                    {Number(form.stock_quantity) < 0 && (
+                      <p className="text-xs text-red-400 mt-1">Oversold — more was sold than was recorded in stock</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-slate-400 mb-1.5 block">Low Stock Alert</label>

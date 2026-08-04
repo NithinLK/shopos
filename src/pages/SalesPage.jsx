@@ -71,7 +71,11 @@ const CatalogPanel = memo(function CatalogPanel({
                   </span>
                 )}
               </div>
-              {item.track_stock && <p className="text-xs text-slate-500 mt-0.5">Stock: {item.stock_quantity}</p>}
+              {item.track_stock && (
+                <p className={`text-xs mt-0.5 ${item.stock_quantity < 0 ? 'text-red-400 font-semibold' : 'text-slate-500'}`}>
+                  Stock: {item.stock_quantity}
+                </p>
+              )}
             </button>
           )
         })}
@@ -251,8 +255,12 @@ export default function SalesPage() {
 
       for (const item of cart.items) {
         if (item.track_stock) {
+          // Intentionally not clamped at 0: if a sale exceeds what's on record, stock is
+          // allowed to go negative so the Items page can surface it as "Oversold". This
+          // only affects the stock number shown on the Items page — Reports always counts
+          // units sold from the transaction record itself, never from stock_quantity.
           await supabase.from('items')
-            .update({ stock_quantity: Math.max(0, (item.stock_quantity || 0) - item.quantity) })
+            .update({ stock_quantity: (item.stock_quantity || 0) - item.quantity })
             .eq('id', item.id)
         }
       }

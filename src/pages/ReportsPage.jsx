@@ -23,13 +23,27 @@ export default function ReportsPage() {
       const r = getDateRange(preset); start = r.start; end = r.end
     }
 
-    const { data: txns } = await supabase.from('transactions')
-      .select('*, transaction_items(*)')
-      .eq('status', 'completed')
-      .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString())
+    // Supabase/PostgREST caps each request at 1000 rows by default, so a period with
+    // more than 1000 completed transactions would silently get cut off. Page through
+    // results in batches of 1000 until a page comes back short, so every transaction
+    // in range is included regardless of how many there are.
+    const PAGE_SIZE = 1000
+    let txns = []
+    let page = 0
+    while (true) {
+      const { data, error } = await supabase.from('transactions')
+        .select('*, transaction_items(*)')
+        .eq('status', 'completed')
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString())
+        .order('created_at', { ascending: true })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
 
-    if (!txns) { setLoading(false); return }
+      if (error) { console.error(error); break }
+      txns = txns.concat(data || [])
+      if (!data || data.length < PAGE_SIZE) break
+      page++
+    }
 
     let grossSales = 0, totalCost = 0, discounts = 0
     const itemMap = {}
