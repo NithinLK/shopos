@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../utils/supabase'
+import { cacheGet, cacheSet, CACHE_KEYS } from '../utils/offlineStore'
 
 const AppContext = createContext(null)
 
@@ -7,7 +8,7 @@ export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('shopos_user')) } catch { return null }
   })
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState(() => cacheGet(CACHE_KEYS.settings) || {
     store_name: 'My Store', currency_symbol: '₹', tax_rate: 0,
     enable_tax: false, upi_id: '', receipt_footer: 'Thank you for shopping with us!'
   })
@@ -15,7 +16,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     supabase.from('store_settings').select('*').limit(1).single()
-      .then(({ data }) => { if (data) setSettings(data) })
+      .then(({ data }) => { if (data) { setSettings(data); cacheSet(CACHE_KEYS.settings, data) } })
   }, [])
 
   const login = useCallback((user) => {
@@ -30,7 +31,7 @@ export function AppProvider({ children }) {
 
   const refreshSettings = useCallback(async () => {
     const { data } = await supabase.from('store_settings').select('*').limit(1).single()
-    if (data) setSettings(data)
+    if (data) { setSettings(data); cacheSet(CACHE_KEYS.settings, data) }
   }, [])
 
   return (

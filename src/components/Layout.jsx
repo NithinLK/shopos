@@ -13,10 +13,53 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings, permission: 'settings' },
 ]
 
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useApp } from '../hooks/useApp'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { getPendingSalesCount } from '../utils/offlineStore'
+import { syncPendingSales } from '../utils/syncEngine'
+import { ShoppingCart, Package, Receipt, BarChart2, Users, Settings, LogOut, Menu, X, Store, WifiOff, RefreshCw } from 'lucide-react'
+import { nameToColor, canAccess } from '../utils/helpers'
+
+const navItems = [
+  { path: '/sales', label: 'Sales', icon: ShoppingCart, permission: 'sales' },
+  { path: '/items', label: 'Items', icon: Package, permission: 'items' },
+  { path: '/receipts', label: 'Receipts', icon: Receipt, permission: 'receipts' },
+  { path: '/reports', label: 'Reports', icon: BarChart2, permission: 'reports' },
+  { path: '/staff', label: 'Staff', icon: Users, permission: 'staff' },
+  { path: '/settings', label: 'Settings', icon: Settings, permission: 'settings' },
+]
+
 export default function Layout({ children }) {
   const { currentUser, logout, settings, sidebarOpen, setSidebarOpen } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
+  const online = useOnlineStatus()
+  const [pendingCount, setPendingCount] = useState(getPendingSalesCount())
+  const [syncing, setSyncing] = useState(false)
+
+  const runSync = useCallback(async () => {
+    if (syncing) return
+    setSyncing(true)
+    const result = await syncPendingSales()
+    setPendingCount(result.remaining)
+    setSyncing(false)
+  }, [syncing])
+
+  // Try syncing as soon as we come back online, and once on load in case there
+  // were sales queued from a previous offline session.
+  useEffect(() => {
+    if (online) runSync()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
+  // Keep the pending count fresh even without a sync (e.g. a new offline sale
+  // was just queued on the Sales page).
+  useEffect(() => {
+    const id = setInterval(() => setPendingCount(getPendingSalesCount()), 3000)
+    return () => clearInterval(id)
+  }, [])
 
   const go = (path) => { navigate(path); setSidebarOpen(false) }
   const bg = nameToColor(currentUser?.name)
@@ -28,6 +71,27 @@ export default function Layout({ children }) {
 
   return (
     <div className="h-full flex flex-col bg-surface-900 overflow-hidden">
+      {/* Offline / sync banner */}
+      {(!online || pendingCount > 0) && (
+        <div className={`flex items-center gap-2 px-4 py-2 text-xs font-medium shrink-0 z-20 ${!online ? 'bg-amber-500/15 text-amber-300' : 'bg-brand-500/15 text-brand-300'}`}>
+          {!online ? (
+            <>
+              <WifiOff size={13} />
+              <span>You're offline — sales are being saved on this device</span>
+              {pendingCount > 0 && <span className="ml-auto font-semibold">{pendingCount} pending</span>}
+            </>
+          ) : (
+            <>
+              <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+              <span>{syncing ? 'Syncing...' : `${pendingCount} sale${pendingCount === 1 ? '' : 's'} waiting to sync`}</span>
+              {!syncing && (
+                <button onClick={runSync} className="ml-auto underline underline-offset-2">Sync now</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Top Bar */}
       <header className="flex items-center gap-3 px-4 py-3 bg-surface-800 border-b border-white/5 shrink-0 z-10">
         <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-white/10 transition-colors">

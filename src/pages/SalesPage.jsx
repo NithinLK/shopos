@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import { supabase } from '../utils/supabase'
 import { useCart } from '../hooks/useCart'
 import { useApp } from '../hooks/useApp'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { cacheGet, cacheSet, CACHE_KEYS, addPendingSale } from '../utils/offlineStore'
 import {
   Search, X, Plus, Minus, Trash2, Tag, ChevronUp,
-  Delete, CreditCard, Banknote, CheckCircle, Share2, Package
+  Delete, CreditCard, Banknote, CheckCircle, Share2, Package, WifiOff
 } from 'lucide-react'
 import { formatCurrency, generateTxnNumber, formatWhatsAppReceipt, formatDate } from '../utils/helpers'
 
@@ -167,9 +169,10 @@ export default function SalesPage() {
   const { settings, currentUser } = useApp()
   const cart = useCart()
   const sym = settings.currency_symbol || '₹'
+  const online = useOnlineStatus()
 
-  const [items, setItems] = useState([])
-  const [categories, setCategories] = useState([])
+  const [items, setItems] = useState(() => cacheGet(CACHE_KEYS.items, []))
+  const [categories, setCategories] = useState(() => cacheGet(CACHE_KEYS.categories, []))
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
   const [showCart, setShowCart] = useState(false)
@@ -182,10 +185,17 @@ export default function SalesPage() {
   const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
+    // Show whatever's cached immediately (already done via useState initializer above),
+    // then quietly refresh from the network. If the network fetch comes back empty
+    // (offline, or a real error), keep showing the cached catalog instead of blanking it.
     supabase.from('items').select('*, categories(name,color)').eq('is_active', true).order('name')
-      .then(({ data }) => setItems(data || []))
+      .then(({ data }) => {
+        if (data && data.length > 0) { setItems(data); cacheSet(CACHE_KEYS.items, data) }
+      })
     supabase.from('categories').select('*').order('name')
-      .then(({ data }) => setCategories(data || []))
+      .then(({ data }) => {
+        if (data && data.length > 0) { setCategories(data); cacheSet(CACHE_KEYS.categories, data) }
+      })
   }, [])
 
   const handleItemTap = useCallback((item) => {
@@ -224,53 +234,125 @@ export default function SalesPage() {
     else setQtyInput(p => p + val)
   }
 
+  const finishSale = (txn, txnItems) => {
+    setSuccessModal({ txn, items: txnItems, discountAmount: cart.totals.discountAmount })
+    setPaymentModal(false)
+    cart.clearCart()
+    setShowCart(false)
+  }
+
+  const submitOnlineSale = async (txnNumber, method) => {
+    const { data: txn, error } = await supabase.from('transactions').insert({
+      transaction_number: txnNumber,
+      status: 'completed',
+      payment_method: method,
+      subtotal: cart.totals.subtotal,
+      discount_amount: cart.totals.discountAmount,
+      discount_type: cart.discount.type,
+      discount_value: cart.discount.value,
+      total: cart.totals.total,
+      cashier_id: currentUser.id,
+    }).select().single()
+    if (error) throw error
+
+    const txnItems = cart.items.map(i => ({
+      transaction_id: txn.id,
+      item_id: i.id,
+      item_name: i.name,
+      item_price: i.price,
+      item_cost: i.cost,
+      quantity: i.quantity,
+      line_total: i.price * i.quantity - (i.line_discount || 0),
+    }))
+    const { error: itemsErr } = await supabase.from('transaction_items').insert(txnItems)
+    if (itemsErr) throw itemsErr
+
+    for (const item of cart.items) {
+      if (item.track_stock) {
+        // Intentionally not clamped at 0: if a sale exceeds what's on record, stock is
+        // allowed to go negative so the Items page can surface it as "Oversold". This
+        // only affects the stock number shown on the Items page — Reports always counts
+        // units sold from the transaction record itself, never from stock_quantity.
+        await supabase.from('items')
+          .update({ stock_quantity: (item.stock_quantity || 0) - item.quantity })
+          .eq('id', item.id)
+      }
+    }
+
+    finishSale(txn, txnItems)
+  }
+
+  // No connection: keep the sale locally instead of losing it. It's queued exactly
+  // as it would have been sent to Supabase, and gets pushed for real (with a real
+  // stock update) once the app is back online — see src/utils/syncEngine.js.
+  const queueOfflineSale = (txnNumber, method) => {
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const createdAt = new Date().toISOString()
+
+    const offlineItems = cart.items.map(i => ({
+      item_id: i.id,
+      item_name: i.name,
+      item_price: i.price,
+      item_cost: i.cost,
+      quantity: i.quantity,
+      track_stock: i.track_stock,
+      line_total: i.price * i.quantity - (i.line_discount || 0),
+    }))
+
+    addPendingSale({
+      localId,
+      transaction_number: txnNumber,
+      payment_method: method,
+      subtotal: cart.totals.subtotal,
+      discount_amount: cart.totals.discountAmount,
+      discount_type: cart.discount.type,
+      discount_value: cart.discount.value,
+      total: cart.totals.total,
+      cashier_id: currentUser.id,
+      created_offline_at: createdAt,
+      items: offlineItems,
+    })
+
+    // Optimistic local stock update, so the catalog (and any further offline sales
+    // in this same session) reflect it immediately instead of waiting for a sync.
+    setItems(prev => {
+      const updated = prev.map(it => {
+        const cartItem = cart.items.find(c => c.id === it.id)
+        if (cartItem && it.track_stock) {
+          return { ...it, stock_quantity: (it.stock_quantity || 0) - cartItem.quantity }
+        }
+        return it
+      })
+      cacheSet(CACHE_KEYS.items, updated)
+      return updated
+    })
+
+    finishSale(
+      { id: localId, transaction_number: txnNumber, payment_method: method,
+        subtotal: cart.totals.subtotal, total: cart.totals.total, created_at: createdAt, pending: true },
+      offlineItems
+    )
+  }
+
   const processPayment = async (method) => {
     if (cart.items.length === 0) return
     setProcessing(true)
+    const txnNumber = generateTxnNumber()
     try {
-      const txnNumber = generateTxnNumber()
-      const { data: txn, error } = await supabase.from('transactions').insert({
-        transaction_number: txnNumber,
-        status: 'completed',
-        payment_method: method,
-        subtotal: cart.totals.subtotal,
-        discount_amount: cart.totals.discountAmount,
-        discount_type: cart.discount.type,
-        discount_value: cart.discount.value,
-        total: cart.totals.total,
-        cashier_id: currentUser.id,
-      }).select().single()
-      if (error) throw error
-
-      const txnItems = cart.items.map(i => ({
-        transaction_id: txn.id,
-        item_id: i.id,
-        item_name: i.name,
-        item_price: i.price,
-        item_cost: i.cost,
-        quantity: i.quantity,
-        line_total: i.price * i.quantity - (i.line_discount || 0),
-      }))
-      await supabase.from('transaction_items').insert(txnItems)
-
-      for (const item of cart.items) {
-        if (item.track_stock) {
-          // Intentionally not clamped at 0: if a sale exceeds what's on record, stock is
-          // allowed to go negative so the Items page can surface it as "Oversold". This
-          // only affects the stock number shown on the Items page — Reports always counts
-          // units sold from the transaction record itself, never from stock_quantity.
-          await supabase.from('items')
-            .update({ stock_quantity: (item.stock_quantity || 0) - item.quantity })
-            .eq('id', item.id)
-        }
+      if (online) {
+        await submitOnlineSale(txnNumber, method)
+      } else {
+        queueOfflineSale(txnNumber, method)
       }
-
-      setSuccessModal({ txn, items: txnItems, discountAmount: cart.totals.discountAmount })
-      setPaymentModal(false)
-      cart.clearCart()
-      setShowCart(false)
     } catch (e) {
-      alert('Payment failed: ' + e.message)
+      if (!navigator.onLine) {
+        // We thought we had a connection but the request still failed — safe to queue
+        // since this only happens on the very first write (the transaction insert),
+        // before anything else for this sale has been created.
+        queueOfflineSale(txnNumber, method)
+      } else {
+        alert('Payment failed: ' + e.message)
+      }
     } finally {
       setProcessing(false)
     }
@@ -442,8 +524,13 @@ export default function SalesPage() {
             </div>
             <h3 className="text-white font-bold text-2xl mb-1">Payment Done!</h3>
             <p className="text-slate-400 mb-1">{successModal.txn.transaction_number}</p>
-            <p className="text-green-400 font-bold text-xl mb-6">{formatCurrency(successModal.txn.total, sym)}</p>
-            <div className="bg-surface-700 rounded-2xl p-4 mb-4">
+            <p className="text-green-400 font-bold text-xl mb-2">{formatCurrency(successModal.txn.total, sym)}</p>
+            {successModal.txn.pending && (
+              <p className="flex items-center justify-center gap-1.5 text-amber-400 text-xs mb-4">
+                <WifiOff size={12} /> Saved offline — will sync automatically once you're back online
+              </p>
+            )}
+            <div className="bg-surface-700 rounded-2xl p-4 mb-4 mt-4">
               <p className="text-slate-400 text-sm mb-2">Share receipt via WhatsApp (optional)</p>
               <div className="flex gap-2">
                 <input className="input-field text-sm" placeholder="Phone e.g. 919876543210"

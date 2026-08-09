@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../hooks/useApp'
 import { supabase } from '../utils/supabase'
-import { Store, Delete } from 'lucide-react'
+import { Store, Delete, WifiOff } from 'lucide-react'
 import { nameToColor } from '../utils/helpers'
+import { cacheGet, cacheSet, CACHE_KEYS } from '../utils/offlineStore'
 
 export default function LoginPage() {
   const { login, settings } = useApp()
@@ -11,10 +12,24 @@ export default function LoginPage() {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [usingCache, setUsingCache] = useState(false)
 
   useEffect(() => {
     supabase.from('users').select('*').eq('is_active', true).order('name')
-      .then(({ data }) => { setUsers(data || []); setLoading(false) })
+      .then(({ data, error }) => {
+        if (data && data.length > 0) {
+          setUsers(data)
+          cacheSet(CACHE_KEYS.users, data)
+          setUsingCache(false)
+        } else {
+          // Offline, or the request failed — fall back to whatever profile list
+          // was last successfully loaded, so the app can still be used offline.
+          const cached = cacheGet(CACHE_KEYS.users, [])
+          setUsers(cached)
+          setUsingCache(cached.length > 0)
+        }
+        setLoading(false)
+      })
   }, [])
 
   const handlePin = (digit) => {
@@ -59,6 +74,18 @@ export default function LoginPage() {
         {!selected ? (
           <>
             <p className="text-center text-slate-400 mb-4 text-sm">Select your profile</p>
+            {usingCache && (
+              <div className="flex items-center justify-center gap-1.5 text-amber-400 text-xs mb-4">
+                <WifiOff size={12} /> Offline — showing saved profiles
+              </div>
+            )}
+            {users.length === 0 ? (
+              <div className="text-center text-slate-500 text-sm py-8 flex flex-col items-center gap-2">
+                <WifiOff size={28} className="opacity-40" />
+                <p>No connection, and no saved profiles yet.</p>
+                <p className="text-xs">Please connect to the internet once to load your team.</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 gap-3">
               {users.map(u => (
                 <button key={u.id} onClick={() => setSelected(u)}
@@ -72,6 +99,7 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
+            )}
           </>
         ) : (
           <div className="animate-fade-in">
