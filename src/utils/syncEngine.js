@@ -6,12 +6,9 @@ import { getPendingSales, removePendingSale } from './offlineStore'
 // to go negative (an offline oversell should show up the same way an online one does).
 const adjustStock = async (itemId, delta) => {
   if (!itemId || !delta) return
-  const { data: row, error } = await supabase.from('items')
-    .select('stock_quantity, track_stock').eq('id', itemId).single()
-  if (error || !row || !row.track_stock) return
-  await supabase.from('items')
-    .update({ stock_quantity: (row.stock_quantity || 0) - delta })
-    .eq('id', itemId)
+  // Atomic in-database update (see supabase_adjust_stock.sql); `delta` is units sold.
+  const { error } = await supabase.rpc('adjust_stock', { p_item_id: itemId, p_delta: -delta })
+  if (error) console.error('Stock update failed during sync for item', itemId, error)
 }
 
 // Pushes every locally-queued sale to Supabase, in the order they were made.

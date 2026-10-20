@@ -267,19 +267,41 @@ export default function SalesPage() {
     const { error: itemsErr } = await supabase.from('transaction_items').insert(txnItems)
     if (itemsErr) throw itemsErr
 
+    // Deduct stock atomically in the database (see supabase_adjust_stock.sql). We never
+    // compute "old stock - qty" in the browser: the copy of stock_quantity held here can
+    // be stale (loaded at page open, or changed by another device/sale since), and writing
+    // it back would silently overwrite those deductions. Intentionally not clamped at 0 —
+    // an oversold item goes negative and shows as "Oversold" on the Items page.
+    const stockFailures = []
+    const newStock = {}
     for (const item of cart.items) {
-      if (item.track_stock) {
-        // Intentionally not clamped at 0: if a sale exceeds what's on record, stock is
-        // allowed to go negative so the Items page can surface it as "Oversold". This
-        // only affects the stock number shown on the Items page — Reports always counts
-        // units sold from the transaction record itself, never from stock_quantity.
-        await supabase.from('items')
-          .update({ stock_quantity: (item.stock_quantity || 0) - item.quantity })
-          .eq('id', item.id)
+      if (!item.track_stock) continue
+      const { data, error: stockErr } = await supabase.rpc('adjust_stock', {
+        p_item_id: item.id, p_delta: -item.quantity,
+      })
+      if (stockErr) {
+        console.error('Stock update failed for', item.name, stockErr)
+        stockFailures.push(item.name)
+      } else if (data !== null && data !== undefined) {
+        newStock[item.id] = data
       }
     }
 
+    // Keep the on-screen catalog (and its offline cache) in step with the database value.
+    if (Object.keys(newStock).length > 0) {
+      setItems(prev => {
+        const updated = prev.map(it => it.id in newStock ? { ...it, stock_quantity: newStock[it.id] } : it)
+        cacheSet(CACHE_KEYS.items, updated)
+        return updated
+      })
+    }
+
     finishSale(txn, txnItems)
+
+    // The sale itself is saved, so don't fail it — but never hide a stock problem.
+    if (stockFailures.length > 0) {
+      alert('Sale saved, but stock could not be updated for: ' + stockFailures.join(', ') + '. Please adjust these manually.')
+    }
   }
 
   // No connection: keep the sale locally instead of losing it. It's queued exactly

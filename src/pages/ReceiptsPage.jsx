@@ -66,12 +66,9 @@ export default function ReceiptsPage() {
   // see the note on the Items page / Sales checkout for why.
   const adjustStock = async (itemId, delta) => {
     if (!itemId || !delta) return
-    const { data: row, error } = await supabase.from('items')
-      .select('stock_quantity, track_stock').eq('id', itemId).single()
-    if (error || !row || !row.track_stock) return
-    await supabase.from('items')
-      .update({ stock_quantity: (row.stock_quantity || 0) + delta })
-      .eq('id', itemId)
+    // Atomic in-database update (see supabase_adjust_stock.sql); positive delta adds stock back.
+    const { error } = await supabase.rpc('adjust_stock', { p_item_id: itemId, p_delta: delta })
+    if (error) throw error
   }
 
   const addItemToEdit = (item) => {
